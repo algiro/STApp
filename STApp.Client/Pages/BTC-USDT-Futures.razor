@@ -4,7 +4,9 @@
 @using OKX.Api
 @using OKX.Api.Public
 @using System.Collections.Concurrent
+@using STApp.Client.Service
 @rendermode InteractiveServer
+@inject IOKXSubscriber subscriber;
 
 <PageTitle>BTC-USDT Futures</PageTitle>
 
@@ -15,14 +17,10 @@
     </MudItem>
     <MudItem>
         <MudIconButton Icon="@Icons.Material.Filled.Add" @onclick="SubscribeToFutures">Subscribe</MudIconButton>
-    </MudItem>
-    <MudItem>
-        <MudIconButton Icon="@Icons.Material.Filled.Remove" @onclick="UnsubscribeFromFutures" Color="Color.Secondary">Unsubscribe</MudIconButton>
-    </MudItem>
-        
+    </MudItem>       
 </MudGrid>
 
-<MudDataGrid Items="@Tickers.Values">
+<MudDataGrid Items="@subscriber.GetTickers()">
     <Columns>
         <PropertyColumn Property="x => x.InstrumentId" Title="Nr" />
         <PropertyColumn Property="x => x.AskPrice" />
@@ -36,42 +34,37 @@
 </MudDataGrid>
 
 @code {
-	private string instrumentIdToSubscribe = "BTC-USD-250808"; 
-    OkxWebSocketApiClient ws = new OkxWebSocketApiClient();
-    private ConcurrentDictionary<string, OkxPublicTicker> Tickers = new ConcurrentDictionary<string, OkxPublicTicker>();
-    private ConcurrentDictionary<string, CallResult<WebSocketUpdateSubscription>> Subscriptions = new ConcurrentDictionary<string, CallResult<WebSocketUpdateSubscription>>();
+    private string instrumentIdToSubscribe = "BTC-USD-250808";
     // https://my.okx.com/api/v5/public/instruments?instType=FUTURES
 
-    // Subscription
-
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            subscriber = new OKXSubscriber();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error initializing subscriber: {ex.StackTrace}");
+		}
+    }
     private async Task SubscribeToFutures()
     {
-        var subscription = await ws.Public.SubscribeToTickersAsync((data) =>
-        {            
-            Tickers.AddOrUpdate(data.InstrumentId, data, (key, oldValue) => data);
-            InvokeAsync(() => StateHasChanged());
-        }, instrumentIdToSubscribe);
-		Subscriptions.AddOrUpdate(instrumentIdToSubscribe, subscription, (key, oldValue) => subscription);
+        try
+        {
+            await subscriber.SubscribeTicker(instrumentIdToSubscribe, (t) =>
+            {
+                InvokeAsync(() => StateHasChanged());
+            });
+        }
+        catch (Exception ex) {
+            Console.WriteLine($"Error subscribing to {instrumentIdToSubscribe}: {ex.StackTrace}");
+        }
     }
 
-    private void UnsubscribeFromFutures()
-    {
-        if (!Subscriptions.TryRemove(instrumentIdToSubscribe, out var subscription))
-        {
-            Console.WriteLine($"No subscription found for {instrumentIdToSubscribe}");
-            return;
-		}
-        _ = ws.UnsubscribeAsync(subscription.Data);        
-	}
     private void UnsubscribeFromFutures(string instId)
     {
-        if (!Subscriptions.TryRemove(instId, out var subscription))
-        {
-            Console.WriteLine($"No subscription found for {instId}");
-            return;
-        }
-        _ = ws.UnsubscribeAsync(subscription.Data);
-        Tickers.TryRemove(instId, out _);
+		subscriber.Unsubscribe(instId);
     }
 
 }

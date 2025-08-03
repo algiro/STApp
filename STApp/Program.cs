@@ -1,5 +1,6 @@
 using MudBlazor.Services;
 using STApp.Client.Pages;
+using STApp.Client.Service;
 using STApp.Components;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -11,6 +12,7 @@ builder.Services.AddMudServices();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents()
     .AddInteractiveWebAssemblyComponents();
+builder.Services.AddSingleton<IOKXSubscriber, OKXSubscriber>();
 
 var app = builder.Build();
 
