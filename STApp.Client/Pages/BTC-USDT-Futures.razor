@@ -1,0 +1,77 @@
+﻿@page "/btc_usdt_futures"
+@using ApiSharp.Models
+@using ApiSharp.WebSocket
+@using OKX.Api
+@using OKX.Api.Public
+@using System.Collections.Concurrent
+@rendermode InteractiveServer
+
+<PageTitle>BTC-USDT Futures</PageTitle>
+
+<h1>BTC-USDT Futures</h1>
+<MudGrid >
+    <MudItem>
+            <MudTextField @bind-Value="instrumentIdToSubscribe" Label="instrumentId" />
+    </MudItem>
+    <MudItem>
+        <MudIconButton Icon="@Icons.Material.Filled.Add" @onclick="SubscribeToFutures">Subscribe</MudIconButton>
+    </MudItem>
+    <MudItem>
+        <MudIconButton Icon="@Icons.Material.Filled.Remove" @onclick="UnsubscribeFromFutures" Color="Color.Secondary">Unsubscribe</MudIconButton>
+    </MudItem>
+        
+</MudGrid>
+
+<MudDataGrid Items="@Tickers.Values">
+    <Columns>
+        <PropertyColumn Property="x => x.InstrumentId" Title="Nr" />
+        <PropertyColumn Property="x => x.AskPrice" />
+        <PropertyColumn Property="x => x.BidPrice" />
+        <TemplateColumn Title="Action">
+            <CellTemplate>
+                <MudIconButton Icon="@Icons.Material.Filled.Remove" @onclick="() => UnsubscribeFromFutures(context.Item.InstrumentId)" Color="Color.Secondary">Unsubscribe</MudIconButton>
+			</CellTemplate>
+        </TemplateColumn>
+    </Columns>
+</MudDataGrid>
+
+@code {
+	private string instrumentIdToSubscribe = "BTC-USD-250808"; 
+    OkxWebSocketApiClient ws = new OkxWebSocketApiClient();
+    private ConcurrentDictionary<string, OkxPublicTicker> Tickers = new ConcurrentDictionary<string, OkxPublicTicker>();
+    private ConcurrentDictionary<string, CallResult<WebSocketUpdateSubscription>> Subscriptions = new ConcurrentDictionary<string, CallResult<WebSocketUpdateSubscription>>();
+    // https://my.okx.com/api/v5/public/instruments?instType=FUTURES
+
+    // Subscription
+
+    private async Task SubscribeToFutures()
+    {
+        var subscription = await ws.Public.SubscribeToTickersAsync((data) =>
+        {            
+            Tickers.AddOrUpdate(data.InstrumentId, data, (key, oldValue) => data);
+            InvokeAsync(() => StateHasChanged());
+        }, instrumentIdToSubscribe);
+		Subscriptions.AddOrUpdate(instrumentIdToSubscribe, subscription, (key, oldValue) => subscription);
+    }
+
+    private void UnsubscribeFromFutures()
+    {
+        if (!Subscriptions.TryRemove(instrumentIdToSubscribe, out var subscription))
+        {
+            Console.WriteLine($"No subscription found for {instrumentIdToSubscribe}");
+            return;
+		}
+        _ = ws.UnsubscribeAsync(subscription.Data);        
+	}
+    private void UnsubscribeFromFutures(string instId)
+    {
+        if (!Subscriptions.TryRemove(instId, out var subscription))
+        {
+            Console.WriteLine($"No subscription found for {instId}");
+            return;
+        }
+        _ = ws.UnsubscribeAsync(subscription.Data);
+        Tickers.TryRemove(instId, out _);
+    }
+
+}
